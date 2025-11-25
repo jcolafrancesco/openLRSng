@@ -5,6 +5,69 @@ My fork of openLRS code (based on thUndeadMod of openLRS)
 
 More information at http://openlrsng.org
 
+PhyDriver API for external PHY integrations
+==========================================
+
+The firmware can be fronted by an external PHY transport (for example, a
+GNU Radio flow graph) by supplying a `PhyDriver` implementation. The driver
+is a small vtable that lets the radio stack request initialization, push new
+frames out, and poll for inbound frames without blocking timing-critical
+work:
+
+```
+typedef struct {
+  int (*init)(void);
+  int (*send_frame)(const uint8_t *frame, size_t len, bool blocking);
+  int (*poll_frame)(uint8_t *frame, size_t max_len);
+  void (*shutdown)(void);
+} PhyDriver;
+```
+
+Semantics:
+
+* `init` should set up all external resources (sockets, IPC queues, etc.) and
+  return 0 on success.
+* `send_frame` transmits the payload provided by the radio stack. When
+  `blocking` is `true` the function may wait until the payload is fully queued
+  for transport. When it is `false` the function must not block; if the
+  transport queue is full it should return `-EAGAIN` or another negative errno
+  instead of sleeping.
+* `poll_frame` is non-blocking. It should return the number of bytes copied
+  into `frame` when data is available, 0 when no frame is ready, or a negative
+  errno on error. The radio side calls this frequently, so avoid any blocking
+  behavior.
+* `shutdown` tears down resources when the stack stops.
+
+Build hooks:
+
+* PlatformIO builds everything under `openLRSng/` (see `src_dir` in
+  `platformio.ini`). Drop your `phy_driver.c` alongside `openLRSng.ino` to
+  have it compiled automatically, or adjust `src_filter` to pull in another
+  path.
+* The reference implementation in `utils/phy_stub.c` is not compiled by
+  default. Copy or symlink it into `openLRSng/` (or add it to the Makefile's
+  `OBJS` list) when you want to experiment with host-side transports.
+
+Constraints and timing expectations:
+
+* Payloads must respect the firmware limits: control frames are capped at 21
+  bytes and telemetry replies at 9 bytes. Drivers should reject larger frames
+  so the radio stack can respond quickly.【F:openLRSng/binding.h†L89-L99】
+* Frame spacing is derived from the current modulation profile; the stack adds
+  a safety margin on top of the time-on-air calculation, rounding to the next
+  millisecond. External PHYs should be ready to accept a new transmit request
+  roughly every 2–20 ms depending on bitrate and telemetry settings, and
+  should surface receive frames without delay to keep the control loop
+  responsive.【F:openLRSng/common.h†L16-L44】
+
+Example host-facing stub
+========================
+
+`utils/phy_stub.c` provides a minimal UDP-based `PhyDriver` that forwards
+frames to an external process listening on `127.0.0.1:46000`. Outbound frames
+are sent with `sendto(2)`, while inbound frames are read with `recvfrom(2)` in
+non-blocking mode so the firmware's main loop is never stalled.
+
 CONFIGURATOR UTILITY / BINARY FIRMWARE NOTE:
 ============================================
   This software should be used in source form only by expert users, for normal use 'binary' firmwares can be uploaded and configured by free configuration software available for Windows/Mac/Linux from Chrome web store.
