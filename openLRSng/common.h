@@ -368,25 +368,6 @@ void scannerMode(void)
           endFreq   = nextConfig[1] * 1000UL; // kHz -> Hz
           nrSamples = nextConfig[2]; // count
           stepSize  = nextConfig[3] * 1000UL;   // kHz -> Hz
-
-          // set IF filtter BW (kha)
-          if (stepSize < 20000) {
-            spiWriteRegister(RFM22B_IFBW, 0x32);   // 10.6kHz
-          } else if (stepSize < 30000) {
-            spiWriteRegister(RFM22B_IFBW, 0x22);   // 21.0kHz
-          } else if (stepSize < 40000) {
-            spiWriteRegister(RFM22B_IFBW, 0x26);   // 32.2kHz
-          } else if (stepSize < 50000) {
-            spiWriteRegister(RFM22B_IFBW, 0x12);   // 41.7kHz
-          } else if (stepSize < 60000) {
-            spiWriteRegister(RFM22B_IFBW, 0x15);   // 56.2kHz
-          } else if (stepSize < 70000) {
-            spiWriteRegister(RFM22B_IFBW, 0x01);   // 75.2kHz
-          } else if (stepSize < 100000) {
-            spiWriteRegister(RFM22B_IFBW, 0x03);   // 90.0kHz
-          } else {
-            spiWriteRegister(RFM22B_IFBW, 0x05);   // 112.1kHz
-          }
         }
 
         break;

@@ -15,6 +15,17 @@ CONFIGURATOR UTILITY / BINARY FIRMWARE NOTE:
 
   https://openlrsng.org/releases/
 
+PHY ABSTRACTION LAYER:
+======================
+  The radio stack no longer configures the on-board RFM22B directly. Instead
+  it calls a generic PHY driver declared in `openLRSng/RFM.h`. By default a
+  lightweight stub keeps the MAC logic operational without hardware, but you
+  can register your own driver via `rfmRegisterDriver` to forward frames to a
+  GNU Radio/LoRa PHY or other external transport. The MAC exchanges complete
+  `phy_frame` buffers through `tx_frame`/`rx_frame` callbacks, and radio
+  settings are provided to drivers via the consolidated `phy_config` passed to
+  `apply_config`.
+
 TRANSMITTER HW:
 ===============
   - TX_BOARD_TYPE 0 (Arduino Mini/nano 328 16MHz)

@@ -1,304 +1,254 @@
 #ifndef _RFM_H
 #define _RFM_H
 
-// register addresses
-#define RFM22B_INTSTAT1     0x03
-#define RFM22B_INTSTAT2     0x04
-#define RFM22B_INTEN1        0x05
-#define RFM22B_INTEN2        0x06
-#define RFM22B_OPMODE1     0x07
-#define RFM22B_OPMODE2     0x08
-#define RFM22B_XTALCAP      0x09
-#define RFM22B_MCUCLK       0x0A
-#define RFM22B_GPIOCFG0    0x0B
-#define RFM22B_GPIOCFG1    0x0C
-#define RFM22B_GPIOCFG2    0x0D
-#define RFM22B_IOPRTCFG    0x0E
+#include <Arduino.h>
+#include <string.h>
+#include <stdbool.h>
 
-#define RFM22B_IFBW           0x1C
-#define RFM22B_AFCLPGR      0x1D
-#define RFM22B_AFCTIMG      0x1E
-#define RFM22B_RXOSR         0x20
-#define RFM22B_NCOFF2       0x21
-#define RFM22B_NCOFF1       0x22
-#define RFM22B_NCOFF0       0x23
-#define RFM22B_CRGAIN1     0x24
-#define RFM22B_CRGAIN0     0x25
-#define RFM22B_RSSI           0x26
-#define RFM22B_AFCLIM       0x2A
-#define RFM22B_AFC0          0x2B
-#define RFM22B_AFC1          0x2C
+#include "binding.h"
 
-#define RFM22B_DACTL    0x30
-#define RFM22B_HDRCTL1    0x32
-#define RFM22B_HDRCTL2    0x33
-#define RFM22B_PREAMLEN  0x34
-#define RFM22B_PREATH      0x35
-#define RFM22B_SYNC3        0x36
-#define RFM22B_SYNC2        0x37
-#define RFM22B_SYNC1        0x38
-#define RFM22B_SYNC0        0x39
+// Maximum payload size the MAC expects to exchange with the PHY layer.
+#ifndef PHY_MAX_PACKET_LENGTH
+#define PHY_MAX_PACKET_LENGTH 64
+#endif
 
-#define RFM22B_TXHDR3      0x3A
-#define RFM22B_TXHDR2      0x3B
-#define RFM22B_TXHDR1      0x3C
-#define RFM22B_TXHDR0      0x3D
-#define RFM22B_PKTLEN       0x3E
-#define RFM22B_CHKHDR3    0x3F
-#define RFM22B_CHKHDR2   0x40
-#define RFM22B_CHKHDR1   0x41
-#define RFM22B_CHKHDR0   0x42
-#define RFM22B_HDREN3     0x43
-#define RFM22B_HDREN2     0x44
-#define RFM22B_HDREN1     0x45
-#define RFM22B_HDREN0     0x46
-#define RFM22B_RXPLEN      0x4B
+enum phy_mode {
+  PHY_MODE_STANDBY = 0,
+  PHY_MODE_RX,
+  PHY_MODE_TX,
+};
 
-#define RFM22B_TXPOWER   0x6D
-#define RFM22B_TXDR1        0x6E
-#define RFM22B_TXDR0        0x6F
+struct phy_frame {
+  uint8_t length;
+  uint8_t payload[PHY_MAX_PACKET_LENGTH];
+  int8_t rssi;
+  int16_t afc;
+};
 
-#define RFM22B_MODCTL1      0x70
-#define RFM22B_MODCTL2      0x71
-#define RFM22B_FREQDEV      0x72
-#define RFM22B_FREQOFF1     0x73
-#define RFM22B_FREQOFF2     0x74
-#define RFM22B_BANDSEL      0x75
-#define RFM22B_CARRFREQ1  0x76
-#define RFM22B_CARRFREQ0  0x77
-#define RFM22B_FHCH           0x79
-#define RFM22B_FHS             0x7A
-#define RFM22B_TX_FIFO_CTL1    0x7C
-#define RFM22B_TX_FIFO_CTL2    0x7D
-#define RFM22B_RX_FIFO_CTL     0x7E
-#define RFM22B_FIFO            0x7F
+struct phy_status {
+  int8_t rssi;
+  int16_t afc;
+  uint8_t gpio1;
+};
 
-// register fields
-#define RFM22B_OPMODE_POWERDOWN    0x00
-#define RFM22B_OPMODE_READY    0x01  // enable READY mode
-#define RFM22B_OPMODE_TUNE      0x02  // enable TUNE mode
-#define RFM22B_OPMODE_RX      0x04  // enable RX mode
-#define RFM22B_OPMODE_TX      0x08  // enable TX mode
-#define RFM22B_OPMODE_32K      0x10  // enable internal 32k xtal
-#define RFM22B_OPMODE_WUT    0x40  // wake up timer
-#define RFM22B_OPMODE_LBD     0x80  // low battery detector
+struct phy_config {
+  uint32_t frequency;
+  uint8_t channel;
+  uint8_t power;
+  uint8_t step_size;
+  uint8_t direct_output;
+  uint8_t headers[4];
+  const struct rfm22_modem_regs *modem;
+};
 
-#define RFM22B_PACKET_SENT_INTERRUPT               0x04
-#define RFM22B_RX_PACKET_RECEIVED_INTERRUPT   0x02
+// Generic PHY driver definition used to detach the MAC from a specific radio
+// implementation. A custom driver can be registered at runtime to forward
+// frames to an external LoRa/SDR implementation.
+struct phy_driver {
+  void (*init)(uint8_t is_bind);
+  void (*apply_config)(const struct phy_config *cfg);
+  void (*set_mode)(enum phy_mode mode);
+  bool (*tx_frame)(const struct phy_frame *frame);
+  bool (*rx_frame)(struct phy_frame *frame, uint32_t timeout_ms);
+  void (*get_status)(struct phy_status *status);
+};
 
-void rfmInit(uint8_t diversity);
-void rfmClearInterrupts(void);
-void rfmClearIntStatus(void);
-void rfmClearFIFO(uint8_t diversity);
-void rfmSendPacket(uint8_t* pkt, uint8_t size);
+// Simple stub implementation used unless a custom driver is registered.
+// It keeps the most recent packet in memory to mimic RX/TX behaviour while
+// allowing higher layers to compile and exercise their logic without a
+// concrete PHY attached.
+struct stub_phy_state {
+  struct phy_config config;
+  struct phy_frame rx_frame;
+  struct phy_status status;
+  bool has_rx;
+};
 
-uint16_t rfmGetAFCC(void);
-uint8_t rfmGetGPIO1(void);
-uint8_t rfmGetRSSI(void);
-uint8_t rfmGetPacketLength(void);
-void rfmGetPacket(uint8_t *buf, uint8_t size);
+static struct stub_phy_state stub_state = {{0, 0, 0, 0, 0, {0, 0, 0, 0}, NULL}, {0, {0}, 0, 0}, {0, 0, 1}, false};
 
-void rfmSetTX(void);
-void rfmSetRX(void);
-void rfmSetCarrierFrequency(uint32_t f);
-void rfmSetChannel(uint8_t ch);
-void rfmSetDirectOut(uint8_t enable);
-void rfmSetHeader(uint8_t iHdr, uint8_t bHdr);
-void rfmSetModemRegs(struct rfm22_modem_regs* r);
-void rfmSetPower(uint8_t p);
-void rfmSetReadyMode(void);
-void rfmSetStepSize(uint8_t sp);
-
-void rfmInit(uint8_t diversity)
-{
-  spiWriteRegister(RFM22B_INTEN2, 0x00);    // disable interrupts
-  spiWriteRegister(RFM22B_INTEN1, 0x00);    // disable interrupts
-  spiWriteRegister(RFM22B_XTALCAP, 0x7F);   // XTAL cap = 12.5pF
-  spiWriteRegister(RFM22B_MCUCLK, 0x05);    // 2MHz clock
-
-  spiWriteRegister(RFM22B_GPIOCFG2, (diversity ? 0x17 : 0xFD) ); // gpio 2 ant. sw, 1 if diversity on else VDD
-  spiWriteRegister(RFM22B_PREAMLEN, (diversity ? 0x14 : 0x0A) );    // 40 bit preamble, 80 with diversity
-  spiWriteRegister(RFM22B_IOPRTCFG, 0x00);    // gpio 0,1,2 NO OTHER FUNCTION.
-
-  #ifdef SWAP_GPIOS
-  spiWriteRegister(RFM22B_GPIOCFG0, 0x15);    // gpio0 RX State
-  spiWriteRegister(RFM22B_GPIOCFG1, 0x12);    // gpio1 TX State
-  #else
-  spiWriteRegister(RFM22B_GPIOCFG0, 0x12);    // gpio0 TX State
-  spiWriteRegister(RFM22B_GPIOCFG1, 0x15);    // gpio1 RX State
-  #endif
-
-  // Packet settings
-  spiWriteRegister(RFM22B_DACTL, 0x8C);    // enable packet handler, msb first, enable crc,
-  spiWriteRegister(RFM22B_HDRCTL1, 0x0F);    // no broadcast, check header bytes 3,2,1,0
-  spiWriteRegister(RFM22B_HDRCTL2, 0x42);    // 4 byte header, 2 byte sync, variable packet size
-  spiWriteRegister(RFM22B_PREATH, 0x2A);    // preamble detect = 5 (20bits), rssioff = 2
-  spiWriteRegister(RFM22B_SYNC3, 0x2D);    // sync word 3
-  spiWriteRegister(RFM22B_SYNC2, 0xD4);    // sync word 2
-  spiWriteRegister(RFM22B_SYNC1, 0x00);    // sync word 1 (not used)
-  spiWriteRegister(RFM22B_SYNC0, 0x00);    // sync word 0 (not used)
-  spiWriteRegister(RFM22B_HDREN3, 0xFF);    // must set all bits
-  spiWriteRegister(RFM22B_HDREN2, 0xFF);    // must set all bits
-  spiWriteRegister(RFM22B_HDREN1, 0xFF);    // must set all bits
-  spiWriteRegister(RFM22B_HDREN0, 0xFF);    // must set all bits
-
-  spiWriteRegister(RFM22B_FREQOFF1, 0x00);    // no offset
-  spiWriteRegister(RFM22B_FREQOFF2, 0x00);    // no offset
-  spiWriteRegister(RFM22B_FHCH,        0x00);   // set to hop channel 0
+static void stub_init(uint8_t /*is_bind*/) {
+  stub_state.has_rx = false;
 }
 
-void rfmClearFIFO(uint8_t diversity)
-{
-  //clear FIFO, disable multi-packet, enable diversity if needed
-  //requires two write ops, set & clear
-  spiWriteRegister(RFM22B_OPMODE2, (diversity ? 0x83 : 0x03) );
-  spiWriteRegister(RFM22B_OPMODE2, (diversity ? 0x80 : 0x00) );
-}
-
-void rfmClearInterrupts(void)
-{
-  spiWriteRegister(RFM22B_INTEN1, 0x00);
-  spiWriteRegister(RFM22B_INTEN2, 0x00);
-}
-
-void rfmClearIntStatus(void)
-{
-  spiReadRegister(RFM22B_INTSTAT1);
-  spiReadRegister(RFM22B_INTSTAT2);
-}
-
-void rfmSendPacket(uint8_t* pkt, uint8_t size)
-{
-  spiWriteRegister(RFM22B_PKTLEN, size);   // total tx size
-  for (uint8_t i = 0; i < size; i++) {
-    spiWriteRegister(RFM22B_FIFO, pkt[i]);
-  }
-  spiWriteRegister(RFM22B_INTEN1, RFM22B_PACKET_SENT_INTERRUPT);
-}
-
-uint16_t rfmGetAFCC(void)
-{
-  return (((uint16_t) spiReadRegister(RFM22B_AFC0) << 2) | ((uint16_t) spiReadRegister(RFM22B_AFC1) >> 6));
-}
-
-uint8_t rfmGetGPIO1(void)
-{
-  return spiReadRegister(RFM22B_GPIOCFG1);
-}
-
-uint8_t rfmGetRSSI(void)
-{
-  return spiReadRegister(RFM22B_RSSI);
-}
-
-uint8_t rfmGetPacketLength(void)
-{
-  return spiReadRegister(RFM22B_RXPLEN);
-}
-
-void rfmGetPacket(uint8_t *buf, uint8_t size)
-{
-  // Send the package read command
-  spiSendAddress(RFM22B_FIFO);
-  for (uint8_t i = 0; i < size; i++) {
-    buf[i] = spiReadData();
+static void stub_apply_config(const struct phy_config *cfg) {
+  if (cfg) {
+    stub_state.config = *cfg;
   }
 }
 
-void rfmSetTX(void)
-{
-  spiWriteRegister(RFM22B_OPMODE1, (RFM22B_OPMODE_TX | RFM22B_OPMODE_READY));
-  delayMicroseconds(200); // allow for PLL & PA ramp-up, ~200us
-}
+static void stub_set_mode(enum phy_mode /*mode*/) {}
 
-void rfmSetRX(void)
-{
-  spiWriteRegister(RFM22B_INTEN1, RFM22B_RX_PACKET_RECEIVED_INTERRUPT);
-  spiWriteRegister(RFM22B_OPMODE1, (RFM22B_OPMODE_RX | RFM22B_OPMODE_READY));
-  delayMicroseconds(200);  // allow for PLL ramp-up, ~200us
-}
-
-void rfmSetCarrierFrequency(uint32_t f)
-{
-  uint16_t fb, fc, hbsel;
-  if (f < 480000000) {
-    hbsel = 0;
-    fb = f / 10000000 - 24;
-    fc = (f - (fb + 24) * 10000000) * 4 / 625;
-  } else {
-    hbsel = 1;
-    fb = f / 20000000 - 24;
-    fc = (f - (fb + 24) * 20000000) * 2 / 625;
+static bool stub_tx_frame(const struct phy_frame *frame) {
+  if (!frame || frame->length == 0) {
+    stub_state.has_rx = false;
+    return false;
   }
-  spiWriteRegister(RFM22B_BANDSEL, 0x40 + (hbsel ? 0x20 : 0) + (fb & 0x1f));
-  spiWriteRegister(RFM22B_CARRFREQ1, (fc >> 8));
-  spiWriteRegister(RFM22B_CARRFREQ0, (fc & 0xff));
-  delayMicroseconds(200); // VCO / PLL calibration delay
+  stub_state.rx_frame = *frame;
+  stub_state.has_rx = true;
+  stub_state.status.rssi = frame->rssi;
+  stub_state.status.afc = frame->afc;
+  return true;
 }
 
-void rfmSetChannel(uint8_t ch)
-{
-  spiWriteRegister(RFM22B_FHCH, ch);
+static bool stub_rx_frame(struct phy_frame *frame, uint32_t /*timeout_ms*/) {
+  if (!stub_state.has_rx || !frame) {
+    return false;
+  }
+  *frame = stub_state.rx_frame;
+  stub_state.has_rx = false;
+  return true;
 }
 
-void rfmSetDirectOut(uint8_t enable)
-{
- static uint8_t r1 = 0, r2 = 0, r3 = 0;
-  if (enable) {
-    r1 = spiReadRegister(RFM22B_DACTL);
-    r2 = spiReadRegister(RFM22B_MODCTL2);
-    r3 = spiReadRegister(RFM22B_FREQDEV);
-    // setup for direct output, i.e. beacon tones
-    spiWriteRegister(RFM22B_DACTL, 0x00);    //disable packet handling
-    spiWriteRegister(RFM22B_MODCTL2, 0x12);    // trclk=[00] no clock, dtmod=[01] direct using SPI, fd8=0 eninv=0 modtyp=[10] FSK
-    spiWriteRegister(RFM22B_FREQDEV, 0x02);    // fd (frequency deviation) 2*625Hz == 1.25kHz
-  } else {
-    // restore previous values
-    spiWriteRegister(RFM22B_DACTL, r1);
-    spiWriteRegister(RFM22B_MODCTL2, r2);
-    spiWriteRegister(RFM22B_FREQDEV, r3); 
+static void stub_get_status(struct phy_status *status) {
+  if (status) {
+    *status = stub_state.status;
   }
 }
 
-void rfmSetHeader(uint8_t iHdr, uint8_t bHdr)
-{
-  spiWriteRegister(RFM22B_TXHDR3+iHdr, bHdr);
-  spiWriteRegister(RFM22B_CHKHDR3+iHdr, bHdr);
+static const struct phy_driver default_phy_driver = {
+  stub_init,
+  stub_apply_config,
+  stub_set_mode,
+  stub_tx_frame,
+  stub_rx_frame,
+  stub_get_status,
+};
+
+static const struct phy_driver *active_phy_driver = &default_phy_driver;
+static struct phy_config active_config = {0, 0, 0, 0, 0, {0, 0, 0, 0}, NULL};
+static struct phy_status cached_status = {0, 0, 1};
+static struct phy_frame cached_frame = {0, {0}, 0, 0};
+static bool has_cached_frame = false;
+
+inline void rfmRegisterDriver(const struct phy_driver *driver) {
+  active_phy_driver = driver ? driver : &default_phy_driver;
 }
 
-void rfmSetModemRegs(struct rfm22_modem_regs* r)
-{
-  spiWriteRegister(RFM22B_IFBW,        r->r_1c);
-  spiWriteRegister(RFM22B_AFCLPGR,   r->r_1d);
-  spiWriteRegister(RFM22B_AFCTIMG,   r->r_1e);
-  spiWriteRegister(RFM22B_RXOSR,      r->r_20);
-  spiWriteRegister(RFM22B_NCOFF2,     r->r_21);
-  spiWriteRegister(RFM22B_NCOFF1,     r->r_22);
-  spiWriteRegister(RFM22B_NCOFF0,     r->r_23);
-  spiWriteRegister(RFM22B_CRGAIN1,   r->r_24);
-  spiWriteRegister(RFM22B_CRGAIN0,   r->r_25);
-  spiWriteRegister(RFM22B_AFCLIM,     r->r_2a);
-  spiWriteRegister(RFM22B_TXDR1,      r->r_6e);
-  spiWriteRegister(RFM22B_TXDR0,      r->r_6f);
-  spiWriteRegister(RFM22B_MODCTL1,  r->r_70);
-  spiWriteRegister(RFM22B_MODCTL2,  r->r_71);
-  spiWriteRegister(RFM22B_FREQDEV,  r->r_72);
+inline const struct phy_driver *rfmCurrentDriver(void) {
+  return active_phy_driver;
 }
 
-void rfmSetPower(uint8_t power)
-{
-  spiWriteRegister(RFM22B_TXPOWER, power);
-  delayMicroseconds(25); // PA ramp up/down time
+inline void rfmInit(uint8_t diversity) {
+  active_phy_driver->init(diversity);
+  active_phy_driver->apply_config(&active_config);
 }
 
-void rfmSetReadyMode(void)
-{
-  spiWriteRegister(RFM22B_OPMODE1, RFM22B_OPMODE_READY);
+inline void rfmClearInterrupts(void) {
+  has_cached_frame = false;
 }
 
-void rfmSetStepSize(uint8_t sp)
-{
-  spiWriteRegister(RFM22B_FHS, sp);
+inline void rfmClearIntStatus(void) {
+  has_cached_frame = false;
+}
+
+inline void rfmClearFIFO(uint8_t /*diversity*/) {
+  has_cached_frame = false;
+}
+
+inline void rfmSetReadyMode(void) {
+  active_phy_driver->set_mode(PHY_MODE_STANDBY);
+}
+
+inline void rfmSetTX(void) {
+  active_phy_driver->set_mode(PHY_MODE_TX);
+}
+
+inline void rfmSetRX(void) {
+  active_phy_driver->set_mode(PHY_MODE_RX);
+}
+
+inline void rfmSetCarrierFrequency(uint32_t f) {
+  active_config.frequency = f;
+  active_phy_driver->apply_config(&active_config);
+}
+
+inline void rfmSetChannel(uint8_t ch) {
+  active_config.channel = ch;
+  active_phy_driver->apply_config(&active_config);
+}
+
+inline void rfmSetDirectOut(uint8_t enable) {
+  active_config.direct_output = enable;
+  active_phy_driver->apply_config(&active_config);
+}
+
+inline void rfmSetHeader(uint8_t iHdr, uint8_t bHdr) {
+  if (iHdr < 4) {
+    active_config.headers[iHdr] = bHdr;
+    active_phy_driver->apply_config(&active_config);
+  }
+}
+
+inline void rfmSetModemRegs(struct rfm22_modem_regs *r) {
+  active_config.modem = r;
+  active_phy_driver->apply_config(&active_config);
+}
+
+inline void rfmSetPower(uint8_t p) {
+  active_config.power = p;
+  active_phy_driver->apply_config(&active_config);
+}
+
+inline void rfmSetStepSize(uint8_t sp) {
+  active_config.step_size = sp;
+  active_phy_driver->apply_config(&active_config);
+}
+
+inline void rfmSendPacket(uint8_t *pkt, uint8_t size) {
+  struct phy_frame frame;
+  frame.length = size > PHY_MAX_PACKET_LENGTH ? PHY_MAX_PACKET_LENGTH : size;
+  memcpy(frame.payload, pkt, frame.length);
+  frame.rssi = cached_status.rssi;
+  frame.afc = cached_status.afc;
+  active_phy_driver->tx_frame(&frame);
+}
+
+inline void rfmGetStatus(void) {
+  active_phy_driver->get_status(&cached_status);
+}
+
+inline void rfmRefreshRxCache(void) {
+  if (!has_cached_frame) {
+    has_cached_frame = active_phy_driver->rx_frame(&cached_frame, 0);
+    if (has_cached_frame) {
+      cached_status.rssi = cached_frame.rssi;
+      cached_status.afc = cached_frame.afc;
+    }
+  }
+}
+
+inline uint16_t rfmGetAFCC(void) {
+  rfmGetStatus();
+  return cached_status.afc;
+}
+
+inline uint8_t rfmGetGPIO1(void) {
+  rfmGetStatus();
+  return cached_status.gpio1;
+}
+
+inline uint8_t rfmGetRSSI(void) {
+  rfmRefreshRxCache();
+  if (has_cached_frame) {
+    return (uint8_t)cached_frame.rssi;
+  }
+  rfmGetStatus();
+  return (uint8_t)cached_status.rssi;
+}
+
+inline uint8_t rfmGetPacketLength(void) {
+  rfmRefreshRxCache();
+  return has_cached_frame ? cached_frame.length : 0;
+}
+
+inline void rfmGetPacket(uint8_t *buf, uint8_t size) {
+  rfmRefreshRxCache();
+  if (!has_cached_frame || !buf || size == 0) {
+    return;
+  }
+  uint8_t copy_len = (cached_frame.length < size) ? cached_frame.length : size;
+  memcpy(buf, cached_frame.payload, copy_len);
+  has_cached_frame = false;
 }
 
 #endif
